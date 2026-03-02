@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browse — SuperMall</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .user-nav { background: var(--navy); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .user-nav-logo { font-family: var(--font-head); font-size: 1.2rem; font-weight: 800; color: #fff; }
+    .user-nav-logo span { color: var(--orange); }
+    .user-nav-links { display: flex; gap: 0.5rem; align-items: center; }
+    .user-nav-link { color: rgba(255,255,255,0.7); font-size: 0.87rem; padding: 0.4rem 0.9rem; border-radius: 6px; transition: all 0.2s; font-weight: 500; }
+    .user-nav-link:hover, .user-nav-link.active { color: #fff; background: rgba(255,255,255,0.1); }
+    .hero-section { background: linear-gradient(135deg, var(--navy) 0%, #1e3a5f 100%); padding: 3rem 2rem; text-align: center; }
+    .hero-section h1 { font-family: var(--font-head); font-size: clamp(1.5rem, 4vw, 2.5rem); font-weight: 800; color: #fff; margin-bottom: 0.5rem; }
+    .hero-section h1 span { color: var(--orange); }
+    .hero-section p { color: rgba(255,255,255,0.6); margin-bottom: 1.5rem; }
+    .hero-search { display: flex; gap: 0.5rem; max-width: 500px; margin: 0 auto; }
+    .hero-search input { flex: 1; padding: 0.75rem 1rem; border-radius: 8px; border: none; font-size: 0.95rem; outline: none; font-family: var(--font-body); }
+    .hero-search button { padding: 0.75rem 1.5rem; background: var(--orange); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    .browse-body { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }
+    .offers-strip { background: linear-gradient(90deg, var(--navy) 0%, #1e3a5f 100%); border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 2rem; }
+    .offers-strip h2 { font-family: var(--font-head); color: #fff; font-size: 1rem; margin-bottom: 1rem; }
+    .offers-scroll { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 0.5rem; }
+    .section-title { font-family: var(--font-head); font-size: 1.2rem; font-weight: 700; color: var(--navy); margin-bottom: 1rem; }
+    .category-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .chip { padding: 0.4rem 1rem; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 0.83rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .chip:hover, .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  </style>
+</head>
+<body>
+
+<!-- User Navbar -->
+<nav class="user-nav">
+  <div class="user-nav-logo">Super<span>Mall</span></div>
+  <div class="user-nav-links">
+    <a href="browse.html"       class="user-nav-link active">🏬 Browse</a>
+    <a href="compare.html"      class="user-nav-link">⚖️ Compare</a>
+    <a href="shop-detail.html"  class="user-nav-link">🏪 Shops</a>
+    <span class="topbar-user" id="nav-user" style="background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);border-color:rgba(255,255,255,0.15)"></span>
+    <button class="btn btn-ghost btn-sm" id="nav-logout" style="color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.2)">Logout</button>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero-section">
+  <h1>Welcome to <span>SuperMall</span></h1>
+  <p>Discover amazing products, offers, and shops all in one place.</p>
+  <div class="hero-search">
+    <input id="hero-search" type="text" placeholder="Search products, shops, categories..." />
+    <button onclick="doSearch()">Search</button>
+  </div>
+</div>
+
+<div class="browse-body">
+
+  <!-- Active Offers Strip -->
+  <div class="offers-strip">
+    <h2>🔥 Active Offers</h2>
+    <div class="offers-scroll" id="offers-strip"></div>
+  </div>
+
+  <!-- Category Filter -->
+  <div class="section-title">Shop by Category</div>
+  <div class="category-chips" id="category-chips">
+    <span class="chip active" data-cat="" onclick="filterByCategory(this, '')">All</span>
+  </div>
+
+  <!-- Products -->
+  <div class="section-title" id="section-label">Featured Products</div>
+  <div id="products-container"></div>
+
+</div>
+
+<div id="toast-container"></div>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="../js/logger.js"></script>
+<script src="../js/firebase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/shop.js"></script>
+<script src="../js/data-services.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error("Login required");
+  Auth.initNav();
+  Logger.info("browse", "User browse page loaded");
+
+  let allProducts = [];
+
+  function productCard(p) {
+    const discount = p.discountPrice && p.price ? Math.round((1 - p.discountPrice/p.price)*100) : 0;
+    return `
+      <div class="product-card" onclick="window.location.href='shop-detail.html?shopId=${p.shopId}'">
+        <div class="product-card-img">${p.image || "📦"}</div>
+        <div class="product-card-body">
+          <div class="product-card-name">${p.name}</div>
+          <div class="product-card-shop">🏪 ${p.shopName || "—"}</div>
+          <div class="product-card-price">
+            <span class="price-current">${UI.currency(p.discountPrice || p.price)}</span>
+            ${p.discountPrice ? `<span class="price-original">${UI.currency(p.price)}</span>` : ""}
+            ${discount > 0 ? `<span class="price-discount">${discount}% OFF</span>` : ""}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function load() {
+    const [products, offers, categories] = await Promise.all([
+      ProductService.getFeatured(), OfferService.getActive(), CategoryService.getAll()
+    ]);
+    allProducts = await ProductService.getAll();
+
+    // Offers strip
+    document.getElementById("offers-strip").innerHTML = offers.length
+      ? offers.map(o => `
+          <div class="offer-card" style="min-width:220px;max-width:220px">
+            <div class="offer-discount">${o.discount} OFF</div>
+            <div class="offer-title">${o.title}</div>
+            <div class="offer-shop">${o.shopName}</div>
+            <span class="offer-code">${o.code || "No Code Needed"}</span>
+          </div>`).join("")
+      : "<p style='color:rgba(255,255,255,0.4);font-size:0.85rem'>No active offers right now.</p>";
+
+    // Category chips
+    const chips = document.getElementById("category-chips");
+    categories.forEach(c => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.dataset.cat = c.name;
+      chip.textContent = `${c.icon || ""} ${c.name}`;
+      chip.onclick = function() { filterByCategory(this, c.name); };
+      chips.appendChild(chip);
+    });
+
+    // Featured products
+    UI.buildCards("products-container", products, productCard);
+  }
+
+  function filterByCategory(el, cat) {
+    document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    el.classList.add("active");
+    document.getElementById("section-label").textContent = cat ? `${cat} Products` : "All Products";
+    const filtered = cat ? allProducts.filter(p => p.category === cat) : allProducts;
+    UI.buildCards("products-container", filtered, productCard);
+    Logger.info("browse", "Filter by category", { cat });
+  }
+
+  function doSearch() {
+    const q = document.getElementById("hero-search").value.trim().toLowerCase();
+    if (!q) { UI.buildCards("products-container", allProducts, productCard); return; }
+    const results = allProducts.filter(p => p.name.toLowerCase().includes(q) || (p.shopName||"").toLowerCase().includes(q) || (p.category||"").toLowerCase().includes(q));
+    document.getElementById("section-label").textContent = `Search results for "${q}" (${results.length})`;
+    UI.buildCards("products-container", results, productCard);
+    Logger.info("browse", "Product search", { q, results: results.length });
+  }
+
+  document.getElementById("hero-search").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+  load();
+</script>
+</body>
+</html>

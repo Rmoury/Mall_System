@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compare Products — SuperMall</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .user-nav { background: var(--navy); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .user-nav-logo { font-family: var(--font-head); font-size: 1.2rem; font-weight: 800; color: #fff; }
+    .user-nav-logo span { color: var(--orange); }
+    .user-nav-links { display: flex; gap: 0.5rem; align-items: center; }
+    .user-nav-link { color: rgba(255,255,255,0.7); font-size: 0.87rem; padding: 0.4rem 0.9rem; border-radius: 6px; transition: all 0.2s; font-weight: 500; }
+    .user-nav-link:hover, .user-nav-link.active { color: #fff; background: rgba(255,255,255,0.1); }
+    .compare-body { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+    .select-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+
+<nav class="user-nav">
+  <div class="user-nav-logo">Super<span>Mall</span></div>
+  <div class="user-nav-links">
+    <a href="browse.html"  class="user-nav-link">🏬 Browse</a>
+    <a href="compare.html" class="user-nav-link active">⚖️ Compare</a>
+    <a href="shop-detail.html" class="user-nav-link">🏪 Shops</a>
+    <span class="topbar-user" id="nav-user" style="background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);border-color:rgba(255,255,255,0.15)"></span>
+    <button class="btn btn-ghost btn-sm" id="nav-logout" style="color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.2)">Logout</button>
+  </div>
+</nav>
+
+<div class="compare-body">
+  <div class="page-header">
+    <div class="page-header-left"><h1>⚖️ Compare Products</h1><p>Select two products to compare their price, features, and details.</p></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-header"><span class="card-title">Select Products to Compare</span></div>
+    <div class="card-body">
+      <div class="select-row">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Product A</label>
+          <select id="prod-a" class="form-control"><option value="">-- Select Product --</option></select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Product B</label>
+          <select id="prod-b" class="form-control"><option value="">-- Select Product --</option></select>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:1rem" onclick="compareProducts()">Compare Now</button>
+    </div>
+  </div>
+
+  <div id="compare-result"></div>
+</div>
+
+<div id="toast-container"></div>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="../js/logger.js"></script>
+<script src="../js/firebase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/shop.js"></script>
+<script src="../js/data-services.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error("Login required");
+  Auth.initNav();
+
+  async function loadProducts() {
+    const products = await ProductService.getAll();
+    [document.getElementById("prod-a"), document.getElementById("prod-b")].forEach(sel => {
+      products.forEach(p => { sel.innerHTML += `<option value="${p.id}">${p.name} — ${p.shopName} (${UI.currency(p.discountPrice || p.price)})</option>`; });
+    });
+  }
+
+  async function compareProducts() {
+    const idA = document.getElementById("prod-a").value;
+    const idB = document.getElementById("prod-b").value;
+    if (!idA || !idB) { UI.toast("Please select both products","warning"); return; }
+    if (idA === idB) { UI.toast("Please select different products","warning"); return; }
+
+    const { a, b } = await ProductService.compare(idA, idB);
+    Logger.info("compare", "Comparing products", { a: a?.name, b: b?.name });
+
+    const priceA = a.discountPrice || a.price;
+    const priceB = b.discountPrice || b.price;
+
+    const rows = [
+      { label: "Product",     valA: `<strong>${a.name}</strong>`,                    valB: `<strong>${b.name}</strong>` },
+      { label: "Shop",        valA: a.shopName || "—",                                valB: b.shopName || "—" },
+      { label: "Category",    valA: a.category || "—",                                valB: b.category || "—" },
+      { label: "Price",       valA: UI.currency(a.price),                             valB: UI.currency(b.price) },
+      { label: "Sale Price",  valA: a.discountPrice ? `<span class="compare-better">${UI.currency(a.discountPrice)}</span>` : "—", valB: b.discountPrice ? `<span class="compare-better">${UI.currency(b.discountPrice)}</span>` : "—" },
+      { label: "Best Price",  valA: priceA < priceB ? `<span class="compare-better">✅ ${UI.currency(priceA)}</span>` : UI.currency(priceA), valB: priceB < priceA ? `<span class="compare-better">✅ ${UI.currency(priceB)}</span>` : UI.currency(priceB) },
+      { label: "Savings",     valA: a.discountPrice ? `<span class="compare-better">Save ${UI.currency(a.price - a.discountPrice)}</span>` : "—", valB: b.discountPrice ? `<span class="compare-better">Save ${UI.currency(b.price - b.discountPrice)}</span>` : "—" },
+      { label: "Stock",       valA: a.stock > 0 ? `<span class="badge badge-success">${a.stock} in stock</span>` : `<span class="badge badge-danger">Out</span>`, valB: b.stock > 0 ? `<span class="badge badge-success">${b.stock} in stock</span>` : `<span class="badge badge-danger">Out</span>` },
+      { label: "Featured",    valA: a.featured ? "⭐ Yes" : "No",                     valB: b.featured ? "⭐ Yes" : "No" },
+      { label: "Description", valA: a.description || "—",                             valB: b.description || "—" }
+    ];
+
+    document.getElementById("compare-result").innerHTML = `
+      <div class="card">
+        <div class="card-header"><span class="card-title">Comparison Result</span></div>
+        <div class="card-body" style="padding:0">
+          <div class="compare-grid">
+            <div class="compare-label compare-header" style="background:var(--bg);color:var(--text-mid)">Feature</div>
+            <div class="compare-header">${a.image || "📦"} ${a.name}</div>
+            <div class="compare-header">${b.image || "📦"} ${b.name}</div>
+            ${rows.map(r => `
+              <div class="compare-label">${r.label}</div>
+              <div class="compare-val">${r.valA}</div>
+              <div class="compare-val">${r.valB}</div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:1rem;padding:1rem;background:var(--orange-light);border-radius:var(--radius);border-left:4px solid var(--orange)">
+        <strong>💡 Recommendation:</strong> 
+        ${priceA < priceB
+          ? `<strong>${a.name}</strong> is cheaper by ${UI.currency(priceB - priceA)}.`
+          : priceB < priceA
+          ? `<strong>${b.name}</strong> is cheaper by ${UI.currency(priceA - priceB)}.`
+          : "Both products are priced the same!"}
+      </div>`;
+  }
+
+  loadProducts();
+</script>
+</body>
+</html>

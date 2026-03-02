@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shop Details — SuperMall</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .user-nav { background: var(--navy); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .user-nav-logo { font-family: var(--font-head); font-size: 1.2rem; font-weight: 800; color: #fff; }
+    .user-nav-logo span { color: var(--orange); }
+    .user-nav-links { display: flex; gap: 0.5rem; align-items: center; }
+    .user-nav-link { color: rgba(255,255,255,0.7); font-size: 0.87rem; padding: 0.4rem 0.9rem; border-radius: 6px; font-weight: 500; }
+    .user-nav-link:hover, .user-nav-link.active { color: #fff; background: rgba(255,255,255,0.1); }
+    .shop-body { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
+    .shop-selector { max-width: 400px; margin-bottom: 2rem; }
+    .shop-header { background: linear-gradient(135deg, var(--navy), var(--navy-mid)); border-radius: var(--radius); padding: 2rem; color: #fff; margin-bottom: 1.5rem; display: flex; gap: 2rem; align-items: center; flex-wrap: wrap; }
+    .shop-icon { font-size: 3.5rem; width: 80px; height: 80px; background: rgba(255,255,255,0.1); border-radius: 16px; display: grid; place-items: center; }
+    .shop-info h2 { font-family: var(--font-head); font-size: 1.6rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .shop-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .shop-meta span { font-size: 0.83rem; background: rgba(255,255,255,0.1); padding: 0.25rem 0.75rem; border-radius: 20px; }
+  </style>
+</head>
+<body>
+
+<nav class="user-nav">
+  <div class="user-nav-logo">Super<span>Mall</span></div>
+  <div class="user-nav-links">
+    <a href="browse.html"      class="user-nav-link">🏬 Browse</a>
+    <a href="compare.html"     class="user-nav-link">⚖️ Compare</a>
+    <a href="shop-detail.html" class="user-nav-link active">🏪 Shops</a>
+    <span class="topbar-user" id="nav-user" style="background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);border-color:rgba(255,255,255,0.15)"></span>
+    <button class="btn btn-ghost btn-sm" id="nav-logout" style="color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.2)">Logout</button>
+  </div>
+</nav>
+
+<div class="shop-body">
+
+  <div class="page-header">
+    <div class="page-header-left"><h1>🏪 Shop Directory</h1><p>View all shops, their products, and current offers.</p></div>
+  </div>
+
+  <!-- Shop Selector -->
+  <div class="shop-selector">
+    <label class="form-label">Select a Shop</label>
+    <select id="shop-selector" class="form-control" onchange="loadShopDetail(this.value)">
+      <option value="">-- Choose a Shop --</option>
+    </select>
+  </div>
+
+  <div id="shop-detail-area">
+    <!-- All shops list shown by default -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">All Shops</span></div>
+      <div class="card-body" style="padding:0" id="all-shops-table"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="../js/logger.js"></script>
+<script src="../js/firebase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/shop.js"></script>
+<script src="../js/data-services.js"></script>
+<script>
+  if (!Auth.requireAuth()) throw new Error("Login required");
+  Auth.initNav();
+
+  async function loadAll() {
+    const shops = await ShopService.getAll();
+    const sel = document.getElementById("shop-selector");
+    shops.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name} — ${s.floor} (${s.unit})</option>`; });
+
+    // Check URL param
+    const params = new URLSearchParams(window.location.search);
+    const shopId = params.get("shopId");
+    if (shopId) { sel.value = shopId; loadShopDetail(shopId); return; }
+
+    // Show all shops table
+    UI.buildTable("all-shops-table", [
+      { key: "name",     label: "Shop",     render: s => `<strong>${s.name}</strong><br/><small style="color:var(--text-light)">${s.description||""}</small>` },
+      { key: "category", label: "Category" },
+      { key: "floor",    label: "Floor" },
+      { key: "unit",     label: "Unit" },
+      { key: "open",     label: "Hours",    render: s => `${s.open||""} – ${s.close||""}` },
+      { key: "active",   label: "Status",   render: s => UI.statusBadge(s.active) }
+    ], shops, [
+      { label: "View", icon: "👁️", className: "btn-view", onClick: id => `loadShopDetail('${id}')` }
+    ]);
+  }
+
+  async function loadShopDetail(shopId) {
+    if (!shopId) return;
+    Logger.info("shop-detail", "Loading shop detail", { shopId });
+
+    const [shop, products, offers] = await Promise.all([
+      ShopService.getById(shopId),
+      ProductService.getByShop(shopId),
+      OfferService.getByShop(shopId)
+    ]);
+
+    if (!shop) { UI.toast("Shop not found","error"); return; }
+
+    document.getElementById("shop-detail-area").innerHTML = `
+      <div class="shop-header">
+        <div class="shop-icon">🏪</div>
+        <div class="shop-info">
+          <h2>${shop.name}</h2>
+          <p style="color:rgba(255,255,255,0.7)">${shop.description || ""}</p>
+          <div class="shop-meta">
+            <span>🏢 ${shop.floor} · ${shop.unit}</span>
+            <span>🗂️ ${shop.category}</span>
+            <span>📞 ${shop.phone || "N/A"}</span>
+            <span>🕐 ${shop.open||"10:00"} – ${shop.close||"22:00"}</span>
+            <span>${shop.active ? "✅ Open" : "❌ Closed"}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shop Offers -->
+      ${offers.length ? `
+        <div class="card" style="margin-bottom:1.25rem">
+          <div class="card-header"><span class="card-title">🏷️ Current Offers</span></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem">
+              ${offers.map(o => `
+                <div class="offer-card">
+                  <div class="offer-discount">${o.discount} OFF</div>
+                  <div class="offer-title">${o.title}</div>
+                  <div class="offer-shop">Valid till ${o.validTo || "—"}</div>
+                  <span class="offer-code">${o.code || "No Code Needed"}</span>
+                </div>`).join("")}
+            </div>
+          </div>
+        </div>` : ""}
+
+      <!-- Shop Products -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📦 Products (${products.length})</span>
+          <a href="compare.html" class="btn btn-ghost btn-sm">⚖️ Compare Products</a>
+        </div>
+        <div class="card-body">
+          ${products.length
+            ? `<div class="card-grid">${products.map(p => {
+                const discount = p.discountPrice && p.price ? Math.round((1-p.discountPrice/p.price)*100) : 0;
+                return `<div class="product-card">
+                  <div class="product-card-img">${p.image||"📦"}</div>
+                  <div class="product-card-body">
+                    <div class="product-card-name">${p.name}</div>
+                    <div class="product-card-shop" style="color:var(--text-light);font-size:0.8rem">${p.description||""}</div>
+                    <div class="product-card-price" style="margin-top:0.5rem">
+                      <span class="price-current">${UI.currency(p.discountPrice||p.price)}</span>
+                      ${p.discountPrice ? `<span class="price-original">${UI.currency(p.price)}</span>` : ""}
+                      ${discount > 0 ? `<span class="price-discount">${discount}% OFF</span>` : ""}
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-light);margin-top:0.4rem">Stock: ${p.stock}</div>
+                  </div>
+                </div>`;}).join("")}</div>`
+            : "<p style='color:var(--text-light);text-align:center;padding:2rem'>No products available yet.</p>"}
+        </div>
+      </div>
+      <div style="margin-top:1rem">
+        <button class="btn btn-ghost btn-sm" onclick="loadAll();document.getElementById('shop-selector').value=''">← Back to All Shops</button>
+      </div>`;
+  }
+
+  loadAll();
+</script>
+</body>
+</html>
