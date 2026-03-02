@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SuperMall — Login</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏬</text></svg>" />
+</head>
+<body>
+
+<div class="auth-page">
+  <!-- Left Hero Panel -->
+  <div class="auth-hero">
+    <div class="hero-logo">Super<span>Mall</span></div>
+    <p class="hero-tagline">Your complete mall management platform</p>
+    <div class="hero-features">
+      <div class="hero-feature"><div class="hero-feature-icon">🏪</div><span>Manage shops, floors & categories</span></div>
+      <div class="hero-feature"><div class="hero-feature-icon">🏷️</div><span>Create & track product offers</span></div>
+      <div class="hero-feature"><div class="hero-feature-icon">📊</div><span>Real-time dashboard analytics</span></div>
+      <div class="hero-feature"><div class="hero-feature-icon">🔍</div><span>Advanced product search & compare</span></div>
+    </div>
+  </div>
+
+  <!-- Right Form Area -->
+  <div class="auth-form-area">
+    <div class="auth-form-box">
+      <h1 class="auth-form-title">Welcome back 👋</h1>
+      <p class="auth-form-sub">Sign in to access the SuperMall platform</p>
+
+      <!-- Demo credentials hint -->
+      <div class="demo-creds">
+        <strong>🧪 Demo Credentials:</strong>
+        <span>Admin: <code>admin@mall.com</code> / <code>Admin@123</code></span><br/>
+        <span>User: <code>user@mall.com</code> / <code>User@123</code></span>
+      </div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <input type="email" id="email" class="form-control" placeholder="you@example.com" required autocomplete="email" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input type="password" id="password" class="form-control" placeholder="••••••••" required />
+        </div>
+
+        <div id="login-error" class="login-error" style="display:none;color:#ef4444;font-size:0.85rem;margin-bottom:0.75rem;"></div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="login-btn">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDKs (compat version) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script src="js/logger.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+
+<script>
+  // Redirect if already logged in
+  if (Auth.isLoggedIn()) {
+    const role = Auth.currentUser()?.role;
+    window.location.href = role === "admin" ? "admin/dashboard.html" : "user/browse.html";
+  }
+
+  document.getElementById("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email    = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const btn      = document.getElementById("login-btn");
+    const errEl    = document.getElementById("login-error");
+    errEl.style.display = "none";
+
+    btn.textContent = "Signing in...";
+    btn.disabled = true;
+
+    try {
+      const user = await Auth.login(email, password);
+      UI.toast(`Welcome back, ${user.name}! 🎉`, "success");
+      setTimeout(() => {
+        window.location.href = user.role === "admin" ? "admin/dashboard.html" : "user/browse.html";
+      }, 800);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = "block";
+      btn.textContent = "Sign In";
+      btn.disabled = false;
+      Logger.error("login", "Login failed", err.message);
+    }
+  });
+</script>
+</body>
+</html>

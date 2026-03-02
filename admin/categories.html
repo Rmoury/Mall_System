@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Categories & Floors — SuperMall Admin</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">Super<span>Mall</span></div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html"  class="nav-link"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="shops.html"      class="nav-link"><span class="nav-icon">🏪</span> Shops</a>
+      <a href="products.html"   class="nav-link"><span class="nav-icon">📦</span> Products</a>
+      <a href="offers.html"     class="nav-link"><span class="nav-icon">🏷️</span> Offers</a>
+      <a href="categories.html" class="nav-link active"><span class="nav-icon">🗂️</span> Categories & Floors</a>
+    </nav>
+  </aside>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <span class="topbar-title">Categories & Floors</span>
+      <div class="topbar-right">
+        <span class="topbar-user" id="nav-user"></span>
+        <button class="btn btn-ghost btn-sm" id="nav-logout">Logout</button>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="page-header">
+        <div class="page-header-left"><h1>Categories & Floors</h1><p>Manage mall floor layouts and shop categories.</p></div>
+        <button class="btn btn-primary" onclick="openForm()">+ Add Category</button>
+      </div>
+
+      <!-- Floor Summary Cards -->
+      <div id="floor-cards" style="margin-bottom:1.5rem"></div>
+
+      <!-- Categories Table -->
+      <div class="card"><div class="card-body" style="padding:0" id="cat-table"></div></div>
+    </main>
+  </div>
+</div>
+
+<!-- Form Modal -->
+<div id="cat-modal" style="display:none">
+  <div class="modal-overlay modal-show">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-header">
+        <h3 class="modal-title" id="form-title">Add Category</h3>
+        <button class="modal-close" onclick="closeForm()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cat-id" />
+        <div class="form-group"><label class="form-label">Category Name *</label><input id="f-name" class="form-control" required /></div>
+        <div class="form-group"><label class="form-label">Emoji Icon</label><input id="f-icon" class="form-control" placeholder="e.g. 💻" /></div>
+        <div class="form-group"><label class="form-label">Floor *</label>
+          <input id="f-floor" class="form-control" list="floor-list" placeholder="e.g. Floor 1" />
+          <datalist id="floor-list"></datalist>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCat()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="../js/logger.js"></script>
+<script src="../js/firebase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/shop.js"></script>
+<script src="../js/data-services.js"></script>
+<script>
+  if (!Auth.requireAuth("admin")) throw new Error("Unauthorized");
+  Auth.initNav();
+  let allCats = [];
+
+  async function load() {
+    allCats = await CategoryService.getAll();
+    const shops = await ShopService.getAll();
+
+    // Floor cards
+    const floors = [...new Set(allCats.map(c => c.floor))].sort();
+    const datalist = document.getElementById("floor-list");
+    datalist.innerHTML = floors.map(f => `<option value="${f}">`).join("");
+
+    document.getElementById("floor-cards").innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem">
+        ${floors.map(floor => {
+          const floorCats = allCats.filter(c => c.floor === floor);
+          const floorShops = shops.filter(s => s.floor === floor);
+          return `
+            <div class="card" style="padding:1.25rem">
+              <div style="font-family:var(--font-head);font-size:1rem;font-weight:700;margin-bottom:0.75rem;color:var(--navy)">🏢 ${floor}</div>
+              <div style="display:flex;gap:1.5rem">
+                <div><div style="font-size:1.4rem;font-weight:700;color:var(--orange)">${floorShops.length}</div><div style="font-size:0.75rem;color:var(--text-light)">Shops</div></div>
+                <div><div style="font-size:1.4rem;font-weight:700;color:var(--teal)">${floorCats.length}</div><div style="font-size:0.75rem;color:var(--text-light)">Categories</div></div>
+              </div>
+              <div style="margin-top:0.75rem;display:flex;flex-wrap:wrap;gap:0.3rem">
+                ${floorCats.map(c => `<span class="badge badge-default">${c.icon||""} ${c.name}</span>`).join("")}
+              </div>
+            </div>`;
+        }).join("")}
+      </div>`;
+
+    UI.buildTable("cat-table", [
+      { key: "icon",  label: "Icon",     render: c => `<span style="font-size:1.5rem">${c.icon||"🗂️"}</span>` },
+      { key: "name",  label: "Category" },
+      { key: "floor", label: "Floor",    render: c => `<span class="badge badge-blue">${c.floor}</span>` }
+    ], allCats, [
+      { label: "Edit",   icon: "✏️", className: "btn-edit",   onClick: id => `openForm('${id}')` },
+      { label: "Delete", icon: "🗑️", className: "btn-delete", onClick: id => `deleteCat('${id}')` }
+    ]);
+  }
+
+  async function openForm(id = null) {
+    document.getElementById("form-title").textContent = id ? "Edit Category" : "Add Category";
+    document.getElementById("cat-id").value = id || "";
+    if (id) {
+      const c = allCats.find(x => x.id === id);
+      if (c) { document.getElementById("f-name").value = c.name; document.getElementById("f-icon").value = c.icon||""; document.getElementById("f-floor").value = c.floor; }
+    } else { document.getElementById("f-name").value = document.getElementById("f-icon").value = document.getElementById("f-floor").value = ""; }
+    document.getElementById("cat-modal").style.display = "block";
+  }
+
+  function closeForm() { document.getElementById("cat-modal").style.display = "none"; }
+
+  async function saveCat() {
+    const id   = document.getElementById("cat-id").value;
+    const data = { name: document.getElementById("f-name").value.trim(), icon: document.getElementById("f-icon").value.trim(), floor: document.getElementById("f-floor").value.trim() };
+    if (!data.name || !data.floor) { UI.toast("Name and floor are required","warning"); return; }
+    try {
+      id ? await CategoryService.update(id, data) : await CategoryService.create(data);
+      UI.toast(id ? "Updated ✅" : "Created 🎉","success");
+      closeForm(); load();
+    } catch(e) { UI.toast("Error: "+e.message,"error"); }
+  }
+
+  function deleteCat(id) {
+    UI.confirm("Delete this category?", async () => { await CategoryService.remove(id); UI.toast("Deleted","success"); load(); });
+  }
+
+  load();
+</script>
+</body>
+</html>
